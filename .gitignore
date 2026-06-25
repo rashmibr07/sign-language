@@ -18,5 +18,9 @@ android/local.properties
 *.iml
 .idea/
 
+# Downloaded build artifacts
+apk_download/
+*.apk
+
 # OS
 .DS_Store

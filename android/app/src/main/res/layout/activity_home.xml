@@ -1,46 +1,104 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:background="#0E1117"
-    android:padding="32dp">
+    android:background="#070B12">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Understand Every Sign"
-        android:textColor="#FFFFFF"
-        android:textSize="30sp"
-        android:textStyle="bold"
-        android:gravity="center" />
+    <!-- Full-screen background image -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:src="@drawable/dataset_card"
+        android:contentDescription="@null" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="48dp"
-        android:text="Sign language detection"
-        android:textColor="#9AA4B2"
-        android:textSize="16sp"
-        android:gravity="center" />
+    <!-- Dark scrim fading downward for readability -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/home_scrim" />
 
-    <Button
-        android:id="@+id/detectButton"
+    <!-- Title near the top -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="20dp"
-        android:padding="18dp"
-        android:text="Detect Sign"
-        android:textSize="18sp" />
+        android:layout_gravity="top"
+        android:layout_marginTop="56dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp">
 
-    <Button
-        android:id="@+id/recordButton"
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Understand"
+            android:textColor="#FFFFFF"
+            android:textSize="40sp"
+            android:textStyle="bold"
+            android:shadowColor="#3FD6FF"
+            android:shadowRadius="24"
+            android:shadowDx="0"
+            android:shadowDy="0" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Every Sign"
+            android:textColor="#33D6FF"
+            android:textSize="40sp"
+            android:textStyle="bold"
+            android:shadowColor="#8033D6FF"
+            android:shadowRadius="28"
+            android:shadowDx="0"
+            android:shadowDy="0" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="AI sign language detection"
+            android:textColor="#B8C4D6"
+            android:textSize="15sp"
+            android:letterSpacing="0.05" />
+    </LinearLayout>
+
+    <!-- Buttons near the bottom -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="18dp"
-        android:text="Record Data"
-        android:textSize="18sp" />
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:paddingStart="28dp"
+        android:paddingEnd="28dp"
+        android:paddingBottom="48dp">
 
-</LinearLayout>
+        <Button
+            android:id="@+id/detectButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="18dp"
+            android:background="@drawable/btn_neon"
+            android:paddingTop="18dp"
+            android:paddingBottom="18dp"
+            android:text="Detect Sign"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:stateListAnimator="@null" />
+
+        <Button
+            android:id="@+id/recordButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/btn_neon"
+            android:paddingTop="18dp"
+            android:paddingBottom="18dp"
+            android:text="Record Data"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:stateListAnimator="@null" />
+    </LinearLayout>
+
+</FrameLayout>
