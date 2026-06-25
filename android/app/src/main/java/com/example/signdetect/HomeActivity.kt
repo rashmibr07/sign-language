@@ -14,8 +14,5 @@ class HomeActivity : ComponentActivity() {
         findViewById<Button>(R.id.detectButton).setOnClickListener {
             startActivity(Intent(this, DetectActivity::class.java))
         }
-        findViewById<Button>(R.id.recordButton).setOnClickListener {
-            startActivity(Intent(this, RecordActivity::class.java))
-        }
     }
 }
