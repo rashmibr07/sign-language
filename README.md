@@ -1,176 +1,101 @@
-# Sign Language Detection (real-time, webcam)
+# Sign Detect — Sign Language Detection App (Android)
 
-A working real-time sign-language (fingerspelling) recognizer, built as the
-practical version of the vision-based + deep-learning approach described in the
-reference survey papers.
-
-Instead of feeding raw camera pixels to a CNN, it uses **MediaPipe HandLandmarker**
-to find 21 hand keypoints, then a small **neural network (MLP)** classifies the
-shape of the hand into a sign. This runs in real time on a laptop with no GPU.
+**Sign Detect** is an Android app that recognizes **American Sign Language (ASL)
+fingerspelling** — the hand signs for letters **A–Z**. Point your phone camera at a
+hand sign (or upload a photo) and it tells you the letter in real time, **fully
+offline**.
 
 ```
-camera frame  ->  MediaPipe (21 hand points)  ->  normalize  ->  MLP  ->  letter
+camera frame  →  find 21 hand keypoints (MediaPipe)  →  normalize  →  small neural net  →  letter
 ```
 
-## Quick start — a trained model is already included
+Instead of classifying raw pixels, the app first detects **21 hand landmarks** with
+MediaPipe, then a tiny **neural network** classifies the hand's shape. This is light
+enough to run smoothly on a phone with no GPU.
 
-You do **not** need to know sign language or collect any data. A ready model
-(`models/sign_model.pkl`, ~89% test accuracy over A–Z) was trained for you from a
-public dataset of ~8,400 hand images. After setup below, just run:
+---
 
-```bash
-# test on the bundled sample images (no webcam):
-python src/predict_image.py --image test_images/sample_L.jpg --show
-python src/predict_image.py --image test_images/sample_A.jpg
+## Download & install
 
-# or live from your webcam:
-python src/detect.py
-```
+1. Open the repo's **Actions** tab → latest **Build APK** run → **Artifacts** →
+   download `sign-detect-apk` and unzip to get `app-debug.apk`.
+   (Or use the GitHub CLI: `gh run download --name sign-detect-apk`.)
+2. Copy the APK to your Android phone (Drive, email, USB…).
+3. Tap to install — allow **"install from unknown source"** when prompted.
+4. On first launch, allow the **Camera** permission.
 
-To see how to form each letter for webcam mode, open **`asl_alphabet_chart.png`**
-— a grid of the real hand shapes (from the training images) for A–Z. Note: J and
-Z use motion in ASL, so their single-frame poses are the least reliable.
+> It's a debug build for personal use, so Android shows the "unknown source" prompt.
+> Everything runs on-device; no data leaves the phone.
 
-Everything below (collecting/ingesting data, training) is only needed if you want
-to build your own model or improve this one.
+---
 
-## Setup
+## How to use
 
-```bash
-cd "sign laguage"
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+**Home screen — "Understand Every Sign":** tap **Detect Sign**.
 
-The hand-detection model file `models/hand_landmarker.task` is already included.
-If it is ever missing, re-download it:
+**Detect screen:**
+- **Live camera** — make a hand sign; the predicted letter shows at the top.
+- **Upload image** — pick a photo; it shows `Detected sign: X` with confidence, or
+  *"Unable to detect — please upload a different picture"* if no hand is found.
+- **Switch camera** — toggle front/back (front camera matches the model best).
 
-```bash
-curl -sSL -o models/hand_landmarker.task \
-  https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
-```
+Use `asl_alphabet_chart.png` (in this repo) as a guide for forming each A–Z shape.
 
-## How to use it (3 steps)
+---
 
-### 1. Collect data
+## How it works (technical)
 
-**Easiest — guided session for the whole alphabet (recommended):**
-Walks you through every letter in one run: a READY screen, a countdown, then it
-auto-records samples and moves to the next sign.
+1. **CameraX** streams frames (keep-only-latest so it never lags).
+2. Each frame is rotated upright (and mirrored for the front camera).
+3. **MediaPipe HandLandmarker** returns **21 landmarks** `(x, y, z)` → **63 numbers**.
+4. The 63 numbers are normalized — **wrist-relative** (position-independent) and
+   **scaled by the largest distance** (size-independent).
+5. A **Multi-Layer Perceptron** classifies them:
+   `63 → Dense(128)+ReLU → Dense(64)+ReLU → Dense(26)+Softmax → letter`.
+6. If confidence ≥ 55%, the letter is displayed.
 
-```bash
-python src/collect_alphabet.py
-python src/collect_alphabet.py --samples 150 --countdown 3
-python src/collect_alphabet.py --letters ABCDEFGHIKLMNOPQRSTUVWXY   # skip J,Z (motion signs)
-```
+The classifier was trained on ~8,400 public ASL hand images (**~89%** test accuracy)
+and its weights are embedded in the app as `classifier.json`. The Kotlin code runs the
+exact same math as the trained model, so phone predictions match it precisely.
 
-READY screen: **space**=start this sign, **s**=skip, **b**=back, **q**=quit.
-While recording: **a**=abort this sign (keeps what was saved), **q**=quit.
+**Bundled assets:**
+- `hand_landmarker.task` — MediaPipe hand-detection model.
+- `classifier.json` — the trained neural-network weights (labels + layer weights).
 
-**Or — one sign at a time** (handy for adding/redoing a single letter):
+**Tech stack:** Kotlin · CameraX · MediaPipe Tasks Vision · AndroidX · ExifInterface.
+Min SDK 24 (Android 7.0), target SDK 34.
 
-```bash
-python src/collect_data.py --label A
-```
-
-In the window: press **c** to start/pause recording, **q** to quit.
-
-**Or — no webcam at all: feed it an existing image dataset.**
-Point `ingest_images.py` at a folder with one sub-folder per sign (how most public
-ASL-alphabet datasets ship). It runs each image through MediaPipe and writes the
-same features — so you can train without recording yourself.
-
-```bash
-python src/ingest_images.py --data_dir /path/to/asl_alphabet_train
-python src/ingest_images.py --data_dir ./imgs --per_class 400
-```
-
-Free datasets to download/unzip first: *ASL Alphabet* (Kaggle) or *Sign Language
-MNIST*. Images where no hand is detected are skipped and reported.
-
-Whichever method you use, aim for ~150–200 samples per sign, with variety. You
-need at least 2 different signs. All three scripts append to the same
-`data/dataset.csv`.
-
-### 2. Train the classifier
-Trains the neural network on everything in `data/dataset.csv` and saves it to
-`models/sign_model.pkl`, printing a test-accuracy report.
-
-```bash
-python src/train.py
-```
-
-### 3. Detect in real time
-
-```bash
-python src/detect.py
-```
-
-In the window:
-- **space** — add the current predicted letter to the on-screen text
-- **b** — backspace, **c** — clear, **q** — quit
-
-`--threshold 0.7` makes it only show high-confidence predictions.
-
-### Or test on a single photo (no webcam)
-Predicts the sign in one image and prints the top guesses with confidence.
-
-```bash
-python src/predict_image.py --image path/to/photo.jpg
-python src/predict_image.py --image photo.jpg --topk 3 --show
-python src/predict_image.py --image photo.jpg --save annotated.jpg
-```
+---
 
 ## Project layout
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
-| `src/hand_utils.py` | Shared: MediaPipe detection + landmark normalization (used by all 3 scripts) |
-| `src/collect_alphabet.py` | Step 1 (guided) — walk through the whole alphabet in one webcam session |
-| `src/collect_data.py` | Step 1 (single) — record one sign at a time from the webcam |
-| `src/ingest_images.py` | Step 1 (no webcam) — build the dataset from a folder of labeled images |
-| `src/train.py` | Step 2 — train the MLP neural network, report accuracy, save model |
-| `src/detect.py` | Step 3 — real-time webcam prediction + sentence building |
-| `src/predict_image.py` | Step 3 (no webcam) — predict the sign in a single still photo |
-| `models/hand_landmarker.task` | Pretrained MediaPipe hand-keypoint model |
-| `data/dataset.csv` | Your collected training samples (created in step 1) |
-| `models/sign_model.pkl` | Your trained classifier (created in step 2) |
+| `android/app/src/main/java/.../HomeActivity.kt` | Landing screen (title + Detect button) |
+| `android/app/src/main/java/.../DetectActivity.kt` | Live camera detection + image upload |
+| `android/app/src/main/java/.../HandClassifier.kt` | The neural network (reads `classifier.json`) |
+| `android/app/src/main/java/.../LandmarkFeatures.kt` | Turns 21 landmarks → 63 normalized features |
+| `android/app/src/main/assets/hand_landmarker.task` | MediaPipe hand model |
+| `android/app/src/main/assets/classifier.json` | Trained classifier weights |
+| `android/app/src/main/res/` | Layouts, neon styling, launcher icon |
+| `.github/workflows/build-apk.yml` | Cloud build that produces the APK |
 
-## Why landmarks instead of raw-pixel CNN?
-The papers note CNNs on raw images need large labelled datasets and are sensitive
-to background/lighting. Detecting 21 hand keypoints first makes the input small,
-background-independent, and scale/position-invariant — so a light model trains in
-seconds on data you collect yourself and still generalizes well. To extend toward
-**word/sentence** level (the papers' higher levels), feed sequences of these
-landmark frames into an LSTM instead of a single-frame MLP.
-```
-```
-## Improve accuracy on your own hand, then rebuild the APK
+---
 
-The bundled model is trained on other people's hands. To make it much better on
-*your* hand, add your own samples and rebuild:
+## Building the APK
 
-```bash
-# 1. Collect YOUR hand for every letter (webcam) — adds to the existing data
-python src/collect_alphabet.py --samples 150
+The APK builds automatically in the cloud via **GitHub Actions** on every push to
+`main` (JDK 17 → Android SDK → Gradle 8.7 → `assembleDebug` → uploads the APK
+artifact). No local Android Studio is required.
 
-# 2. Retrain on the combined data
-python src/train.py
+To build locally instead: open the `android/` folder in Android Studio, connect a
+phone, and click **Run**.
 
-# 3. Update the model the Android app uses
-python src/export_for_android.py
+---
 
-# 4. Push — GitHub Actions rebuilds a fresh APK automatically
-git add data/dataset.csv models/sign_model.pkl android/app/src/main/assets/classifier.json
-git commit -m "Add my own hand samples; retrain"
-git push
-```
+## Limitations
 
-Then download the new APK from the repo's Actions tab (or via `gh run download`).
-
-## Tips for good accuracy
-- Even lighting, plain-ish background, hand fully in frame.
-- Collect each sign at slightly different angles, distances, and hand tilts.
-- Keep the number of samples roughly balanced across signs.
-- If two signs get confused, collect more data for both and retrain.
+- Recognizes **static letters only**. Letters **J** and **Z** (motion) and whole
+  **words** (e.g. "thank you") need a sequence/video model and are not supported.
+- Look-alike signs (**U/V/R**, **P/Q**) are the main source of errors.
+- Best results: good lighting, plain background, hand fully in frame, front camera.
