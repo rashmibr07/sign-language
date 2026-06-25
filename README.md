@@ -146,6 +146,29 @@ seconds on data you collect yourself and still generalizes well. To extend towar
 landmark frames into an LSTM instead of a single-frame MLP.
 ```
 ```
+## Improve accuracy on your own hand, then rebuild the APK
+
+The bundled model is trained on other people's hands. To make it much better on
+*your* hand, add your own samples and rebuild:
+
+```bash
+# 1. Collect YOUR hand for every letter (webcam) — adds to the existing data
+python src/collect_alphabet.py --samples 150
+
+# 2. Retrain on the combined data
+python src/train.py
+
+# 3. Update the model the Android app uses
+python src/export_for_android.py
+
+# 4. Push — GitHub Actions rebuilds a fresh APK automatically
+git add data/dataset.csv models/sign_model.pkl android/app/src/main/assets/classifier.json
+git commit -m "Add my own hand samples; retrain"
+git push
+```
+
+Then download the new APK from the repo's Actions tab (or via `gh run download`).
+
 ## Tips for good accuracy
 - Even lighting, plain-ish background, hand fully in frame.
 - Collect each sign at slightly different angles, distances, and hand tilts.
