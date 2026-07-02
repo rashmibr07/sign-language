@@ -37,6 +37,7 @@ class DetectActivity : ComponentActivity() {
 
     private lateinit var previewView: PreviewView
     private lateinit var predictionText: TextView
+    private lateinit var sentenceText: TextView
 
     private lateinit var cameraExecutor: ExecutorService
     private var handLandmarker: HandLandmarker? = null
@@ -44,6 +45,21 @@ class DetectActivity : ComponentActivity() {
 
     private var lensFacing = CameraSelector.LENS_FACING_FRONT
     private val confidenceThreshold = 0.55f
+
+    // ---- Sentence building state ----
+    // The sentence is committed one letter at a time: a letter is only added
+    // when the same sign is held steady for HOLD_FRAMES consecutive frames, and
+    // it won't repeat until the sign changes (or the hand disappears). Removing
+    // the hand for NO_HAND_SPACE_FRAMES inserts a space, so words are separated.
+    private val sentence = StringBuilder()
+    private var candidateLabel: String? = null   // label currently being held
+    private var candidateFrames = 0              // how long it's been held
+    private var lastCommittedLabel: String? = null // last letter added (blocks repeats)
+    private var noHandFrames = 0                 // frames since a hand was seen
+
+    private val HOLD_FRAMES = 10                 // steady frames needed to commit a letter
+    private val NO_HAND_SPACE_FRAMES = 15        // no-hand frames that insert a space
+    private val SPACE_TOKEN = "SPACE"            // pseudo-label for the open-palm space gesture
 
     private val requestPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -61,6 +77,7 @@ class DetectActivity : ComponentActivity() {
 
         previewView = findViewById(R.id.previewView)
         predictionText = findViewById(R.id.predictionText)
+        sentenceText = findViewById(R.id.sentenceText)
 
         findViewById<Button>(R.id.uploadButton).setOnClickListener {
             pickImage.launch("image/*")
@@ -69,6 +86,21 @@ class DetectActivity : ComponentActivity() {
             lensFacing = if (lensFacing == CameraSelector.LENS_FACING_FRONT)
                 CameraSelector.LENS_FACING_BACK else CameraSelector.LENS_FACING_FRONT
             startCamera()
+        }
+        findViewById<Button>(R.id.spaceButton).setOnClickListener { appendSpace() }
+        findViewById<Button>(R.id.backspaceButton).setOnClickListener {
+            if (sentence.isNotEmpty()) {
+                sentence.deleteCharAt(sentence.length - 1)
+                lastCommittedLabel = null
+                sentenceText.text = sentence.toString()
+            }
+        }
+        findViewById<Button>(R.id.clearButton).setOnClickListener {
+            sentence.setLength(0)
+            candidateLabel = null
+            candidateFrames = 0
+            lastCommittedLabel = null
+            sentenceText.text = ""
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -134,15 +166,71 @@ class DetectActivity : ComponentActivity() {
         val result = landmarker.detect(BitmapImageBuilder(upright).build())
         val hands = result.landmarks()
         if (hands.isNotEmpty()) {
-            val (label, prob) = clf.predict(LandmarkFeatures.extract(hands[0]))
-            runOnUiThread {
-                predictionText.text =
-                    if (prob >= confidenceThreshold) "$label   ${(prob * 100).toInt()}%" else "…"
+            noHandFrames = 0
+            if (HandGeometry.isOpenPalm(hands[0])) {
+                // Dedicated space gesture — bypasses the A–Z classifier entirely.
+                onStableSign(SPACE_TOKEN)
+                runOnUiThread { predictionText.text = "␣ space" }
+            } else {
+                val (label, prob) = clf.predict(LandmarkFeatures.extract(hands[0]))
+                if (prob >= confidenceThreshold) {
+                    onStableSign(label)
+                    runOnUiThread {
+                        predictionText.text = "$label   ${(prob * 100).toInt()}%"
+                    }
+                } else {
+                    // Low confidence — treat as "no clear sign", don't build the candidate.
+                    candidateLabel = null
+                    candidateFrames = 0
+                    runOnUiThread { predictionText.text = "…" }
+                }
             }
         } else {
+            candidateLabel = null
+            candidateFrames = 0
+            noHandFrames++
+            if (noHandFrames == NO_HAND_SPACE_FRAMES) {
+                lastCommittedLabel = null // next sign can be committed again
+                runOnUiThread { appendSpace() }
+            }
             runOnUiThread { predictionText.text = "Show a hand sign…" }
         }
         imageProxy.close()
+    }
+
+    /**
+     * Called every frame with a confident sign (an A–Z letter, or [SPACE_TOKEN]
+     * for the open-palm space gesture). Commits it to the sentence once it has
+     * been held steady, and blocks repeats until the sign changes. Runs on the
+     * camera thread; only touches counters + posts UI work.
+     */
+    private fun onStableSign(key: String) {
+        if (key == candidateLabel) {
+            candidateFrames++
+        } else {
+            candidateLabel = key
+            candidateFrames = 1
+        }
+
+        if (candidateFrames == HOLD_FRAMES && key != lastCommittedLabel) {
+            lastCommittedLabel = key
+            runOnUiThread {
+                if (key == SPACE_TOKEN) {
+                    if (sentence.isNotEmpty() && sentence.last() != ' ') sentence.append(' ')
+                } else {
+                    sentence.append(key)
+                }
+                sentenceText.text = sentence.toString()
+            }
+        }
+    }
+
+    /** Adds a single space to the sentence (ignored if the last char is already a space). */
+    private fun appendSpace() {
+        if (sentence.isNotEmpty() && sentence.last() != ' ') {
+            sentence.append(' ')
+            sentenceText.text = sentence.toString()
+        }
     }
 
     // ---------------- Upload image ----------------
